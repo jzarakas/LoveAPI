@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
+	_ "fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,11 +19,13 @@ type queuedSong struct {
 type responseNode struct {
 	Que     int64
 	SongId  string
-	StartAt time.Duration
+	StartAt float64
 }
 
 var queue = make([]queuedSong, 100)
 var queLen int64 = -1
+
+var sendError = responseNode{Que: -1, SongId: "error", StartAt: 0}
 
 func main() {
 
@@ -37,12 +39,14 @@ func main() {
 
 func getCurr(w http.ResponseWriter, r *http.Request) {
 	if queLen < 0 || queue[queLen].StartTime.Add(queue[queLen].TimeDuration).Before(time.Now()) {
-		w.Write([]byte("No song in que"))
+		js, _ := json.Marshal(sendError)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(js)
 	} else {
 		for i := queLen; i >= 0; i-- {
 			if queue[i].StartTime.Add(queue[i].TimeDuration).After(time.Now()) {
 
-				var res = responseNode{Que: i, SongId: queue[i].SongId, StartAt: time.Now().Sub(queue[i].StartTime)}
+				var res = responseNode{Que: i, SongId: queue[i].SongId, StartAt: time.Now().Sub(queue[i].StartTime).Seconds()}
 				js, _ := json.Marshal(res)
 
 				w.Header().Set("Content-Type", "application/json")
@@ -52,7 +56,9 @@ func getCurr(w http.ResponseWriter, r *http.Request) {
 			}
 
 		}
-		w.Write([]byte("Error?"))
+		js, _ := json.Marshal(sendError)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(js)
 
 	}
 }
@@ -80,15 +86,7 @@ func addSong(w http.ResponseWriter, r *http.Request) {
 }
 
 func welcome(w http.ResponseWriter, r *http.Request) {
-	//res = responseNode(Que: queue[0].Que, SongId: queue[0].SongId, StartAt: time.Now().Sub(queue[0].StartTime))
-	zero, _ := time.ParseDuration("0m")
-	var res = responseNode{Que: queue[0].Que, SongId: queue[0].SongId, StartAt: zero}
-	js, err := json.Marshal(res)
-	fmt.Printf("%v", r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	js, _ := json.Marshal(sendError)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(js)
 
@@ -100,17 +98,20 @@ func getNext(w http.ResponseWriter, r *http.Request) {
 
 	num, err := strconv.ParseInt(key, 10, 0)
 
-	fmt.Printf("%v", queue[num+1])
-
 	if err != nil || num+1 > queLen {
+		js, _ := json.Marshal(sendError)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(js)
 		return
 	}
 
 	zero, _ := time.ParseDuration("0m")
-	var res = responseNode{Que: queue[num+1].Que, SongId: queue[num].SongId, StartAt: zero}
+	var res = responseNode{Que: queue[num+1].Que, SongId: queue[num].SongId, StartAt: zero.Seconds()}
 	js, err := json.Marshal(res)
 	if err != nil {
-		//http.Error(w, err.Error(), http.StatusInternalServerError)
+		js, _ := json.Marshal(sendError)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(js)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
